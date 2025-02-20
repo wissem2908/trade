@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en" class="dark-mode">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trading Analysis</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --accent-green: #00ff88;
+            --accent-red: #ff4444;
+            --border-color: #404040;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: var(--accent-green);
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #chart-container {
+            height: 500px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--box-shadow);
+        }
+
+        .controls {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--box-shadow);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        select, button {
+            padding: 12px;
+            margin: 5px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        select:hover, button:hover {
+            border-color: var(--accent-green);
+        }
+
+        .decision-box {
+            background: var(--bg-secondary);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: var(--box-shadow);
+            border: 3px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .decision-text {
+            font-size: 40px;
+            font-weight: bold;
+            margin: 15px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .decision-price {
+            font-size: 28px;
+            margin: 15px 0;
+            color: var(--text-secondary);
+        }
+
+        .decision-buy {
+            border-color: var(--accent-green);
+            background: rgba(0, 255, 136, 0.1);
+        }
+
+        .decision-sell {
+            border-color: var(--accent-red);
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .decision-buy .decision-text {
+            color: var(--accent-green);
+        }
+
+        .decision-sell .decision-text {
+            color: var(--accent-red);
+        }
+
+        .profit-loss {
+            font-size: 22px;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .profit {
+            color: var(--accent-green);
+        }
+
+        .loss {
+            color: var(--accent-red);
+        }
+
+        .indicator-values {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--box-shadow);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .indicator-values div {
+            padding: 10px;
+            border-radius: 6px;
+            background: var(--bg-primary);
+            text-align: center;
+        }
+
+        .current-price {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--accent-green);
+            grid-column: 1 / -1;
+        }
+
+        .alert-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            z-index: 1000;
+            animation: flashAlert 1s infinite;
+            backdrop-filter: blur(8px);
+        }
+
+        .alert-buy {
+            background-color: rgba(0, 255, 136, 0.9);
+            color: var(--bg-primary);
+        }
+
+        .alert-sell {
+            background-color: rgba(255, 68, 68, 0.9);
+            color: var(--bg-primary);
+        }
+
+        @keyframes flashAlert {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+
+        .signals {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--box-shadow);
+        }
+
+        .signals h2 {
+            color: var(--accent-green);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .buy-signal {
+            color: var(--accent-green);
+            padding: 10px;
+            border-radius: 6px;
+            background: rgba(0, 255, 136, 0.1);
+            margin: 5px 0;
+        }
+
+        .sell-signal {
+            color: var(--accent-red);
+            padding: 10px;
+            border-radius: 6px;
+            background: rgba(255, 68, 68, 0.1);
+            margin: 5px 0;
+        }
+
+        .refresh-status {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .api-settings {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .api-input {
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 16px;
+            width: 250px;
+        }
+
+        .api-input:focus {
+            border-color: var(--accent-green);
+            outline: none;
+        }
+
+        .account-info {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--box-shadow);
+        }
+
+        .account-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .balance-item {
+            background: var(--bg-primary);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .balance-amount {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--accent-green);
+        }
+
+        .balance-symbol {
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .position-item {
+            background: var(--bg-primary);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .position-profit {
+            color: var(--accent-green);
+        }
+
+        .position-loss {
+            color: var(--accent-red);
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div id="alert-banner"></div>
+    <div class="container">
+        <h1>Real-Time Crypto Trading Signals</h1>
+        
+        <div class="controls">
+            <select id="symbol">
+                <optgroup label="Top Market Cap">
+                    <option value="BTCUSDT">BTC/USDT (Bitcoin)</option>
+                    <option value="ETHUSDT">ETH/USDT (Ethereum)</option>
+                    <option value="BNBUSDT">BNB/USDT (Binance Coin)</option>
+                    <option value="SOLUSDT">SOL/USDT (Solana)</option>
+                    <option value="XRPUSDT">XRP/USDT (Ripple)</option>
+                    <option value="ADAUSDT">ADA/USDT (Cardano)</option>
+                    <option value="DOGEUSDT">DOGE/USDT (Dogecoin)</option>
+                    <option value="DOTUSDT">DOT/USDT (Polkadot)</option>
+                </optgroup>
+                <optgroup label="DeFi">
+                    <option value="UNIUSDT">UNI/USDT (Uniswap)</option>
+                    <option value="AAVEUSDT">AAVE/USDT (Aave)</option>
+                    <option value="LINKUSDT">LINK/USDT (Chainlink)</option>
+                    <option value="MATICUSDT">MATIC/USDT (Polygon)</option>
+                </optgroup>
+                <optgroup label="Exchange Tokens">
+                    <option value="FTMUSDT">FTM/USDT (Fantom)</option>
+                    <option value="ATOMUSDT">ATOM/USDT (Cosmos)</option>
+                    <option value="NEARUSDT">NEAR/USDT (NEAR Protocol)</option>
+                </optgroup>
+                <optgroup label="Meme Coins">
+                    <option value="SHIBUSDT">SHIB/USDT (Shiba Inu)</option>
+                    <option value="SAFEMOONUSDT">SAFEMOON/USDT (SafeMoon)</option>
+                </optgroup>
+                <optgroup label="Gaming & Metaverse">
+                    <option value="AXSUSDT">AXS/USDT (Axie Infinity)</option>
+                    <option value="SANDUSDT">SAND/USDT (The Sandbox)</option>
+                    <option value="MANAUSDT">MANA/USDT (Decentraland)</option>
+                </optgroup>
+            </select>
+
+            <select id="interval">
+                <option value="1m" selected>1 Minute</option>
+                <option value="5m">5 Minutes</option>
+                <option value="15m">15 Minutes</option>
+                <option value="30m">30 Minutes</option>
+                <option value="1h">1 Hour</option>
+                <option value="4h">4 Hours</option>
+                <option value="1d">1 Day</option>
+            </select>
+
+            <div class="api-settings">
+                <input type="text" id="apiKey" placeholder="Binance API Key" class="api-input">
+                <input type="password" id="apiSecret" placeholder="Binance API Secret" class="api-input">
+                <button id="connect-btn">Connect to Binance</button>
+            </div>
+        </div>
+
+        <div class="indicator-values">
+            <div class="current-price" id="current-price"></div>
+            <div id="indicator-values"></div>
+            <div class="refresh-status" id="refresh-status"></div>
+            <div class="last-signal" id="last-signal"></div>
+        </div>
+
+        <div class="decision-box" id="decision-box">
+            <div class="decision-text" id="decision-text">Loading...</div>
+            <div class="decision-price" id="decision-price"></div>
+            <div class="profit-loss" id="profit-loss"></div>
+        </div>
+
+        <div class="account-info" id="account-info">
+            <h2>Account Information</h2>
+            <div class="account-grid" id="account-details">
+                <div class="loading">Connect your Binance account to view details</div>
+            </div>
+        </div>
+
+        <div id="chart-container"></div>
+
+        <div class="signals">
+            <h2>Trading Signals</h2>
+            <div id="trading-signals"></div>
+        </div>
+    </div>
+
+    <script>
+        // Add these variables at the top of your script
+        let chart;
+        let candleSeries;
+        let autoRefreshInterval;
+        let lastRefreshTime;
+        let lastSignalType = null;
+        let lastAlertTime = 0;
+        let lastPrice = null;
+        let binanceApi = {
+            key: '',
+            secret: ''
+        };
+
+        // Add this constant at the top of your script
+        const PROXY_URL = 'https://cors-proxy.example.com/'; // Replace with your actual proxy URL
+
+        // Update the loadData function to use direct fetch
+        async function loadData() {
+            const symbol = document.getElementById('symbol').value;
+            const interval = document.getElementById('interval').value;
+            
+            try {
+                const response = await fetch(
+                    `${PROXY_URL}https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=100`
+                );
+                
+                const data = await response.json();
+                
+                const candleData = data.map(d => ({
+                    time: d[0] / 1000,
+                    open: parseFloat(d[1]),
+                    high: parseFloat(d[2]),
+                    low: parseFloat(d[3]),
+                    close: parseFloat(d[4])
+                }));
+
+                if (candleSeries) {
+                    candleSeries.setData(candleData);
+                    calculateSignals(candleData, symbol);
+                    lastRefreshTime = new Date();
+                    updateRefreshStatus();
+                }
+
+                // Only try to refresh account info if we have API credentials
+                if (binanceApi && binanceApi.key && binanceApi.secret) {
+                    try {
+                        await fetchAccountInfo();
+                    } catch (error) {
+                        console.error('Error refreshing account data:', error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('trading-signals').innerHTML = 
+                    '<p style="color: red;">Error loading data. Please check connection and try again.</p>';
+            }
+        }
+
+        function initChart() {
+            chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
+                layout: {
+                    background: { color: '#2d2d2d' },
+                    textColor: '#ffffff',
+                },
+                grid: {
+                    vertLines: { color: '#404040' },
+                    horzLines: { color: '#404040' },
+                },
+                crosshair: {
+                    mode: 'normal',
+                    vertLine: {
+                        color: '#606060',
+                        width: 1,
+                        style: 1,
+                        labelBackgroundColor: '#2d2d2d',
+                    },
+                    horzLine: {
+                        color: '#606060',
+                        width: 1,
+                        style: 1,
+                        labelBackgroundColor: '#2d2d2d',
+                    },
+                },
+                timeScale: {
+                    borderColor: '#404040',
+                    timeVisible: true,
+                    backgroundColor: '#2d2d2d',
+                },
+            });
+
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#00ff88',
+                downColor: '#ff4444',
+                borderVisible: false,
+                wickUpColor: '#00ff88',
+                wickDownColor: '#ff4444'
+            });
+
+            const container = document.getElementById('chart-container');
+            const handleResize = () => {
+                chart.applyOptions({
+                    width: container.clientWidth,
+                    height: container.clientHeight
+                });
+            };
+
+            window.addEventListener('resize', handleResize);
+            handleResize();
+        }
+
+        function formatPrice(price, symbol) {
+            if (symbol.includes('SHIB')) {
+                return price.toFixed(8); // More decimals for low-value tokens
+            } else if (['BTC', 'ETH'].some(s => symbol.includes(s))) {
+                return price.toFixed(2); // Standard decimals for major cryptos
+            } else {
+                return price.toFixed(4); // Default decimal places
+            }
+        }
+
+        function updateRefreshStatus() {
+            const status = document.getElementById('refresh-status');
+            status.textContent = `Last updated: ${lastRefreshTime.toLocaleTimeString()}`;
+        }
+
+        function calculateFibonacciLevels(data) {
+            const high = Math.max(...data.map(d => d.high));
+            const low = Math.min(...data.map(d => d.low));
+            const diff = high - low;
+
+            return {
+                level0: high,
+                level23_6: high - (diff * 0.236),
+                level38_2: high - (diff * 0.382),
+                level50_0: high - (diff * 0.5),
+                level61_8: high - (diff * 0.618),
+                level100: low
+            };
+        }
+
+        function calculateRSI(data, periods = 14) {
+            let gains = [];
+            let losses = [];
+            
+            for (let i = 1; i < data.length; i++) {
+                const difference = data[i].close - data[i-1].close;
+                if (difference >= 0) {
+                    gains.push(difference);
+                    losses.push(0);
+                } else {
+                    gains.push(0);
+                    losses.push(Math.abs(difference));
+                }
+            }
+
+            const avgGain = gains.slice(-periods).reduce((a, b) => a + b) / periods;
+            const avgLoss = losses.slice(-periods).reduce((a, b) => a + b) / periods;
+            
+            const rs = avgGain / avgLoss;
+            return 100 - (100 / (1 + rs));
+        }
+
+        function calculateMACD(data) {
+            const ema12 = calculateEMA(data.map(d => d.close), 12);
+            const ema26 = calculateEMA(data.map(d => d.close), 26);
+            return ema12 - ema26;
+        }
+
+        function calculateEMA(prices, periods) {
+            const k = 2 / (periods + 1);
+            let ema = prices[0];
+            for (let i = 1; i < prices.length; i++) {
+                ema = prices[i] * k + ema * (1 - k);
+            }
+            return ema;
+        }
+
+        function calculateSignals(data, symbol) {
+            const fibLevels = calculateFibonacciLevels(data);
+            const rsi = calculateRSI(data);
+            const macd = calculateMACD(data);
+            const currentPrice = data[data.length - 1].close;
+            
+            let signals = [];
+            let signalStrength = 0; // -3 to 3 scale for sell to buy
+
+            // Update current price display with formatted price
+            document.getElementById('current-price').innerHTML = 
+                `Current Price: ${formatPrice(currentPrice, symbol)} USDT`;
+
+            // Update indicator values with formatted prices
+            document.getElementById('indicator-values').innerHTML = `
+                <div>RSI: ${rsi.toFixed(2)}</div>
+                <div>MACD: ${macd.toFixed(4)}</div>
+                <div>Fibonacci Support: ${formatPrice(fibLevels.level23_6, symbol)}</div>
+                <div>Fibonacci Resistance: ${formatPrice(fibLevels.level61_8, symbol)}</div>
+            `;
+
+            // RSI Signals
+            if (rsi < 30) {
+                signals.push({type: 'buy', reason: 'RSI indicates oversold condition (RSI < 30)'});
+                signalStrength += 1;
+            } else if (rsi < 20) {
+                signals.push({type: 'buy', reason: 'RSI indicates extremely oversold condition (RSI < 20)'});
+                signalStrength += 2;
+            } else if (rsi > 70) {
+                signals.push({type: 'sell', reason: 'RSI indicates overbought condition (RSI > 70)'});
+                signalStrength -= 1;
+            } else if (rsi > 80) {
+                signals.push({type: 'sell', reason: 'RSI indicates extremely overbought condition (RSI > 80)'});
+                signalStrength -= 2;
+            }
+
+            // Fibonacci Signals
+            if (currentPrice < fibLevels.level23_6) {
+                signals.push({type: 'buy', reason: 'Price below 23.6% Fibonacci level - strong support'});
+                signalStrength += 1;
+            } else if (currentPrice > fibLevels.level61_8) {
+                signals.push({type: 'sell', reason: 'Price above 61.8% Fibonacci level - strong resistance'});
+                signalStrength -= 1;
+            }
+
+            // MACD Signals
+            if (macd > 0) {
+                signals.push({type: 'buy', reason: 'MACD is positive - upward momentum'});
+                signalStrength += 1;
+            } else if (macd < 0) {
+                signals.push({type: 'sell', reason: 'MACD is negative - downward momentum'});
+                signalStrength -= 1;
+            }
+
+            // Display signals with overall recommendation
+            const signalsContainer = document.getElementById('trading-signals');
+            let signalHTML = signals.map(signal => 
+                `<p class="${signal.type}-signal">
+                    ${signal.type.toUpperCase()}: ${signal.reason}
+                </p>`
+            ).join('');
+
+            // Add overall recommendation
+            let overallSignal = '';
+            if (signalStrength >= 2) {
+                overallSignal = '<div class="strong-signal buy-signal">STRONG BUY SIGNAL</div>';
+            } else if (signalStrength <= -2) {
+                overallSignal = '<div class="strong-signal sell-signal">STRONG SELL SIGNAL</div>';
+            } else if (signalStrength > 0) {
+                overallSignal = '<div class="buy-signal">Weak Buy Signal</div>';
+            } else if (signalStrength < 0) {
+                overallSignal = '<div class="sell-signal">Weak Sell Signal</div>';
+            } else {
+                overallSignal = '<div>Neutral - No Clear Signal</div>';
+            }
+
+            // Modify the signals display section
+            if (signalStrength >= 2) {
+                showAlert('buy', signalStrength);
+            } else if (signalStrength <= -2) {
+                showAlert('sell', Math.abs(signalStrength));
+            } else {
+                document.getElementById('alert-banner').className = '';
+                document.getElementById('alert-banner').textContent = '';
+            }
+
+            signalsContainer.innerHTML = overallSignal + signalHTML;
+
+            const decisionBox = document.getElementById('decision-box');
+            const decisionText = document.getElementById('decision-text');
+            const decisionPrice = document.getElementById('decision-price');
+            const profitLoss = document.getElementById('profit-loss');
+
+            // Calculate price change
+            let priceChange = '';
+            if (lastPrice !== null) {
+                const change = ((currentPrice - lastPrice) / lastPrice) * 100;
+                priceChange = `<div class="${change >= 0 ? 'profit' : 'loss'}">
+                    ${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%
+                </div>`;
+            }
+            lastPrice = currentPrice;
+
+            // Update decision box based on signal strength
+            let decision = '';
+            if (signalStrength >= 2) {
+                decisionBox.className = 'decision-box decision-buy';
+                decision = 'STRONG BUY NOW';
+            } else if (signalStrength <= -2) {
+                decisionBox.className = 'decision-box decision-sell';
+                decision = 'STRONG SELL NOW';
+            } else if (signalStrength > 0) {
+                decisionBox.className = 'decision-box decision-buy';
+                decision = 'Consider Buying';
+            } else if (signalStrength < 0) {
+                decisionBox.className = 'decision-box decision-sell';
+                decision = 'Consider Selling';
+            } else {
+                decisionBox.className = 'decision-box decision-neutral';
+                decision = 'HOLD / NEUTRAL';
+            }
+
+            decisionText.innerHTML = decision;
+            decisionPrice.innerHTML = `Current Price: ${formatPrice(currentPrice, symbol)} USDT`;
+            profitLoss.innerHTML = priceChange;
+        }
+
+        function showAlert(type, strength) {
+            const now = Date.now();
+            // Only show alert if signal type changed or 5 seconds passed
+            if (type !== lastSignalType || (now - lastAlertTime) > 5000) {
+                const alertBanner = document.getElementById('alert-banner');
+                const lastSignalDiv = document.getElementById('last-signal');
+                
+                if (strength >= 2) {
+                    alertBanner.className = 'alert-banner alert-' + type;
+                    alertBanner.textContent = `STRONG ${type.toUpperCase()} SIGNAL!`;
+                    lastSignalDiv.className = 'last-signal ' + type + '-signal';
+                    lastSignalDiv.textContent = `Last Signal: STRONG ${type.toUpperCase()}`;
+                    
+                    // Play alert sound
+                    const audio = new Audio('data:audio/wav;base64,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qJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZ4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=');
+                    audio.play();
+                }
+                
+                lastSignalType = type;
+                lastAlertTime = now;
+            }
+        }
+
+        // Add function to check for stored credentials on page load
+        function checkStoredCredentials() {
+            const storedKey = sessionStorage.getItem('binance_api_key');
+            const storedSecret = sessionStorage.getItem('binance_api_secret');
+            
+            if (storedKey && storedSecret) {
+                document.getElementById('apiKey').value = storedKey;
+                document.getElementById('apiSecret').value = storedSecret;
+                // Attempt to reconnect
+                connectBinance();
+            }
+        }
+
+        // Update the connectBinance function
+        async function connectBinance() {
+            const apiKey = document.getElementById('apiKey').value;
+            const apiSecret = document.getElementById('apiSecret').value;
+            const connectBtn = document.getElementById('connect-btn');
+            
+            if (!apiKey || !apiSecret) {
+                alert('Please enter both API Key and Secret');
+                return;
+            }
+
+            connectBtn.textContent = 'Connecting...';
+            connectBtn.disabled = true;
+
+            try {
+                const timestamp = Date.now();
+                const queryString = `timestamp=${timestamp}`;
+                const signature = await createSignature(queryString, apiSecret);
+
+                // Use proxy URL for the request
+                const response = await fetch(`${PROXY_URL}https://api.binance.com/api/v3/account?${queryString}&signature=${signature}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-MBX-APIKEY': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.code && data.code < 0) {
+                    throw new Error(data.msg || 'Binance API Error');
+                }
+
+                binanceApi.key = apiKey;
+                binanceApi.secret = apiSecret;
+
+                connectBtn.textContent = 'Connected ✓';
+                connectBtn.style.backgroundColor = 'var(--accent-green)';
+                
+                sessionStorage.setItem('binance_api_key', apiKey);
+                sessionStorage.setItem('binance_api_secret', apiSecret);
+
+                await fetchAccountInfo();
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                connectBtn.textContent = 'Connection Failed!';
+                connectBtn.style.backgroundColor = 'var(--accent-red)';
+                alert(`Failed to connect: ${error.message}`);
+            } finally {
+                connectBtn.disabled = false;
+            }
+        }
+
+        // Add helper function for creating signatures
+        async function createSignature(queryString, secret) {
+            const encoder = new TextEncoder();
+            const signatureKey = encoder.encode(secret);
+            const signatureMessage = encoder.encode(queryString);
+            
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                signatureKey,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign(
+                'HMAC',
+                cryptoKey,
+                signatureMessage
+            );
+
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Update fetchAccountInfo function
+        async function fetchAccountInfo() {
+            const timestamp = Date.now();
+            const queryString = `timestamp=${timestamp}`;
+            const signature = await createSignature(queryString, binanceApi.secret);
+
+            try {
+                const accountResponse = await fetch(`${PROXY_URL}https://api.binance.com/api/v3/account?${queryString}&signature=${signature}`, {
+                    headers: {
+                        'X-MBX-APIKEY': binanceApi.key
+                    }
+                });
+
+                const accountData = await accountResponse.json();
+                displayAccountInfo(accountData);
+
+                const ordersResponse = await fetch(`${PROXY_URL}https://api.binance.com/api/v3/openOrders?${queryString}&signature=${signature}`, {
+                    headers: {
+                        'X-MBX-APIKEY': binanceApi.key
+                    }
+                });
+
+                const ordersData = await ordersResponse.json();
+                displayOpenOrders(ordersData);
+            } catch (error) {
+                console.error('Error fetching account data:', error);
+                throw error;
+            }
+        }
+
+        // Initialize everything when the page loads
+        window.onload = function() {
+            try {
+                initChart();
+                loadData();
+                // Set 1-second refresh interval
+                setInterval(loadData, 1000);
+
+                // Add event listeners
+                document.getElementById('symbol').addEventListener('change', function() {
+                    if (chart) {
+                        chart.timeScale().fitContent();
+                    }
+                    loadData();
+                });
+
+                // Add error handling for the connect button
+                const connectBtn = document.getElementById('connect-btn');
+                connectBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    try {
+                        await connectBinance();
+                    } catch (error) {
+                        console.error('Connection error:', error);
+                        alert('Failed to connect: ' + error.message);
+                    }
+                });
+
+                // Check for stored credentials
+                checkStoredCredentials();
+
+            } catch (error) {
+                console.error('Error initializing chart:', error);
+                document.getElementById('chart-container').innerHTML = 
+                    '<p style="color: red;">Error initializing chart. Please refresh the page.</p>';
+            }
+        };
+    </script>
+</body>
+</html>

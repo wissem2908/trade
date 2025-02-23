@@ -206,19 +206,27 @@
         }
 
         .buy-signal {
-            color: var(--accent-green);
-            padding: 10px;
-            border-radius: 6px;
             background: rgba(0, 255, 136, 0.1);
-            margin: 5px 0;
+            border: 1px solid var(--accent-green);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
         }
 
         .sell-signal {
-            color: var(--accent-red);
-            padding: 10px;
-            border-radius: 6px;
             background: rgba(255, 68, 68, 0.1);
-            margin: 5px 0;
+            border: 1px solid var(--accent-red);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+
+        .hold-signal {
+            background: rgba(128, 128, 128, 0.1);
+            border: 1px solid #808080;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
         }
 
         .refresh-status {
@@ -304,6 +312,21 @@
             text-align: center;
             color: var(--text-secondary);
         }
+
+        .stop-loss-container {
+            background: var(--bg-secondary);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        #stop-loss-info {
+            color: var(--accent-red);
+            font-size: 18px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -375,6 +398,10 @@
             <div class="profit-loss" id="profit-loss"></div>
         </div>
 
+        <div class="stop-loss-container">
+            <div id="stop-loss-info">Click on chart to set stop loss</div>
+        </div>
+
         <div class="account-info" id="account-info">
             <h2>Account Information</h2>
             <div class="account-grid" id="account-details">
@@ -403,6 +430,19 @@
             key: '',
             secret: ''
         };
+
+        // Add these variables at the top with other variables
+        let stopLossLine;
+        let stopLossPrice = 0;
+
+        // Set your proxy configuration
+        const PROXY_URL = 'http://192.168.0.251:3128/';
+
+        // Add these variables at the top
+        const PROFIT_TARGET = 0.02; // 2% profit target
+        const STOP_LOSS_PERCENT = 0.01; // 1% stop loss
+        let lastTradeType = null; // 'buy' or 'sell'
+        let lastTradePrice = null;
 
         // Update the loadData function to use direct fetch
         async function loadData() {
@@ -438,6 +478,26 @@
                     } catch (error) {
                         console.error('Error refreshing account data:', error);
                     }
+                }
+
+                const currentPrice = data[data.length - 1].close;
+                
+                // Update stop loss line if it exists
+                if (stopLossPrice > 0) {
+                    const currentTime = Date.now() / 1000;
+                    stopLossLine.setData([{
+                        time: currentTime - 86400,
+                        value: stopLossPrice
+                    }, {
+                        time: currentTime + 86400,
+                        value: stopLossPrice
+                    }]);
+                }
+                
+                // Check if price crossed stop loss
+                if (stopLossPrice > 0 && currentPrice <= stopLossPrice) {
+                    showAlert('sell', 3);
+                    playAlertSound();
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -476,6 +536,9 @@
                     timeVisible: true,
                     backgroundColor: '#2d2d2d',
                 },
+                handleScroll: {
+                    vertTouchDrag: false,
+                },
             });
 
             candleSeries = chart.addCandlestickSeries({
@@ -486,7 +549,54 @@
                 wickDownColor: '#ff4444'
             });
 
+            // Add stop loss line
+            stopLossLine = chart.addLineSeries({
+                color: '#ff4444',
+                lineWidth: 2,
+                lineStyle: 2, // Dashed line
+                title: 'Stop Loss',
+                pane: 0,
+            });
+
+            // Add price scale click handler
+            chart.subscribeClick((param) => {
+                if (param.point) {
+                    const price = candleSeries.coordinateToPrice(param.point.y);
+                    updateStopLoss(price);
+                }
+            });
+
+            // Add mouse move handler for dragging
+            let isDragging = false;
+            chart.subscribeCrosshairMove((param) => {
+                if (isDragging && param.point) {
+                    const price = candleSeries.coordinateToPrice(param.point.y);
+                    updateStopLoss(price);
+                }
+            });
+
+            // Add mouse event listeners
             const container = document.getElementById('chart-container');
+            container.addEventListener('mousedown', (e) => {
+                const rect = container.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const price = candleSeries.coordinateToPrice(y);
+                const stopLossY = stopLossLine.priceToCoordinate(stopLossPrice);
+                
+                // Check if click is near the stop loss line
+                if (Math.abs(y - stopLossY) < 10) {
+                    isDragging = true;
+                }
+            });
+
+            container.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            container.addEventListener('mouseleave', () => {
+                isDragging = false;
+            });
+
             const handleResize = () => {
                 chart.applyOptions({
                     width: container.clientWidth,
@@ -745,34 +855,14 @@
             try {
                 const timestamp = Date.now();
                 const queryString = `timestamp=${timestamp}`;
-                
-                // Create signature
-                const encoder = new TextEncoder();
-                const signatureKey = encoder.encode(apiSecret);
-                const signatureMessage = encoder.encode(queryString);
-                
-                const cryptoKey = await crypto.subtle.importKey(
-                    'raw',
-                    signatureKey,
-                    { name: 'HMAC', hash: 'SHA-256' },
-                    false,
-                    ['sign']
-                );
-                
-                const signature = await crypto.subtle.sign(
-                    'HMAC',
-                    cryptoKey,
-                    signatureMessage
-                );
+                const signature = await createSignature(queryString, apiSecret);
 
-                const signatureHex = Array.from(new Uint8Array(signature))
-                    .map(b => b.toString(16).padStart(2, '0'))
-                    .join('');
-
-                // Test connection with account info request
-                const response = await fetch(`https://api.binance.com/api/v3/account?${queryString}&signature=${signatureHex}`, {
+                // Use the proxy URL for the request
+                const response = await fetch(`${PROXY_URL}https://api.binance.com/api/v3/account?${queryString}&signature=${signature}`, {
+                    method: 'GET',
                     headers: {
-                        'X-MBX-APIKEY': apiKey
+                        'X-MBX-APIKEY': apiKey,
+                        'Content-Type': 'application/json'
                     }
                 });
 
@@ -786,19 +876,15 @@
                     throw new Error(data.msg || 'Binance API Error');
                 }
 
-                // Store API credentials
                 binanceApi.key = apiKey;
                 binanceApi.secret = apiSecret;
 
-                // Update UI
                 connectBtn.textContent = 'Connected ✓';
                 connectBtn.style.backgroundColor = 'var(--accent-green)';
                 
-                // Store credentials in session storage
                 sessionStorage.setItem('binance_api_key', apiKey);
                 sessionStorage.setItem('binance_api_secret', apiSecret);
 
-                // Fetch account information
                 await fetchAccountInfo();
 
             } catch (error) {
@@ -815,10 +901,39 @@
         async function fetchAccountInfo() {
             const timestamp = Date.now();
             const queryString = `timestamp=${timestamp}`;
-            
-            // Create signature
+            const signature = await createSignature(queryString, binanceApi.secret);
+
+            try {
+                const accountResponse = await fetch(`${PROXY_URL}https://api.binance.com/api/v3/account?${queryString}&signature=${signature}`, {
+                    headers: {
+                        'X-MBX-APIKEY': binanceApi.key,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const accountData = await accountResponse.json();
+                displayAccountInfo(accountData);
+
+                // Fetch open orders
+                const ordersResponse = await fetch(`${PROXY_URL}https://api.binance.com/api/v3/openOrders?${queryString}&signature=${signature}`, {
+                    headers: {
+                        'X-MBX-APIKEY': binanceApi.key,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const ordersData = await ordersResponse.json();
+                displayOpenOrders(ordersData);
+            } catch (error) {
+                console.error('Error fetching account data:', error);
+                throw error;
+            }
+        }
+
+        // Add the createSignature function here
+        async function createSignature(queryString, secret) {
             const encoder = new TextEncoder();
-            const signatureKey = encoder.encode(binanceApi.secret);
+            const signatureKey = encoder.encode(secret);
             const signatureMessage = encoder.encode(queryString);
             
             const cryptoKey = await crypto.subtle.importKey(
@@ -835,33 +950,165 @@
                 signatureMessage
             );
 
-            const signatureHex = Array.from(new Uint8Array(signature))
+            return Array.from(new Uint8Array(signature))
                 .map(b => b.toString(16).padStart(2, '0'))
                 .join('');
+        }
 
-            try {
-                const accountResponse = await fetch(`https://api.binance.com/api/v3/account?${queryString}&signature=${signatureHex}`, {
-                    headers: {
-                        'X-MBX-APIKEY': binanceApi.key
-                    }
-                });
+        // Add function to update stop loss
+        function updateStopLoss(price) {
+            stopLossPrice = price;
+            const currentTime = Date.now() / 1000;
+            const data = [{
+                time: currentTime - 86400,
+                value: price
+            }, {
+                time: currentTime + 86400,
+                value: price
+            }];
+            
+            stopLossLine.setData(data);
+            
+            // Update stop loss display
+            const currentPrice = parseFloat(document.querySelector('.current-price').textContent.split(':')[1]);
+            const stopLossPercent = ((currentPrice - price) / currentPrice * 100).toFixed(2);
+            const symbol = document.getElementById('symbol').value;
+            
+            document.getElementById('stop-loss-info').innerHTML = `
+                Stop Loss: ${formatPrice(price, symbol)} USDT (${stopLossPercent}%)
+            `;
+        }
 
-                const accountData = await accountResponse.json();
-                displayAccountInfo(accountData);
+        // Add this function to calculate trading signals
+        function calculateTradingSignals(candleData) {
+            if (candleData.length < 14) return null;
 
-                // Fetch open orders
-                const ordersResponse = await fetch(`https://api.binance.com/api/v3/openOrders?${queryString}&signature=${signatureHex}`, {
-                    headers: {
-                        'X-MBX-APIKEY': binanceApi.key
-                    }
-                });
+            // Calculate technical indicators
+            const closes = candleData.map(d => d.close);
+            const highs = candleData.map(d => d.high);
+            const lows = candleData.map(d => d.low);
 
-                const ordersData = await ordersResponse.json();
-                displayOpenOrders(ordersData);
-            } catch (error) {
-                console.error('Error fetching account data:', error);
-                throw error;
+            // Simple Moving Averages
+            const sma20 = calculateSMA(closes, 20);
+            const sma50 = calculateSMA(closes, 50);
+
+            // RSI
+            const rsi = calculateRSI(closes);
+
+            // Current price
+            const currentPrice = closes[closes.length - 1];
+            const previousPrice = closes[closes.length - 2];
+
+            // Generate trading signals
+            let signal = {
+                type: 'hold',
+                strength: 0,
+                price: currentPrice,
+                stopLoss: null,
+                reason: []
+            };
+
+            // Buy signals
+            if (
+                sma20 > sma50 && // Golden cross
+                rsi < 30 && // Oversold
+                currentPrice > previousPrice // Price increasing
+            ) {
+                signal.type = 'buy';
+                signal.strength = 2;
+                signal.stopLoss = currentPrice * (1 - STOP_LOSS_PERCENT);
+                signal.reason.push('Strong buy signal: Oversold + Golden cross');
             }
+
+            // Sell signals
+            if (
+                sma20 < sma50 && // Death cross
+                rsi > 70 && // Overbought
+                currentPrice < previousPrice // Price decreasing
+            ) {
+                signal.type = 'sell';
+                signal.strength = 2;
+                signal.reason.push('Strong sell signal: Overbought + Death cross');
+            }
+
+            // Update stop loss if we have an active position
+            if (lastTradeType === 'buy' && lastTradePrice) {
+                // Move stop loss up if price increases
+                const trailingStopLoss = currentPrice * (1 - STOP_LOSS_PERCENT);
+                if (trailingStopLoss > stopLossPrice) {
+                    updateStopLoss(trailingStopLoss);
+                }
+
+                // Check if we hit profit target
+                if (currentPrice >= lastTradePrice * (1 + PROFIT_TARGET)) {
+                    signal.type = 'sell';
+                    signal.strength = 2;
+                    signal.reason.push('Profit target reached');
+                }
+            }
+
+            return signal;
+        }
+
+        // Add function to display trading signals
+        function displayTradingSignal(signal) {
+            const signalsDiv = document.getElementById('trading-signals');
+            const currentPrice = signal.price;
+            
+            let html = `
+                <div class="${signal.type}-signal">
+                    <h3>${signal.type.toUpperCase()} Signal</h3>
+                    <p>Current Price: ${formatPrice(currentPrice)}</p>
+                    ${signal.stopLoss ? `<p>Suggested Stop Loss: ${formatPrice(signal.stopLoss)}</p>` : ''}
+                    <p>Reasons:</p>
+                    <ul>
+                        ${signal.reason.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+
+            signalsDiv.innerHTML = html;
+        }
+
+        // Helper function to calculate SMA
+        function calculateSMA(data, period) {
+            if (data.length < period) return null;
+            const sum = data.slice(-period).reduce((a, b) => a + b, 0);
+            return sum / period;
+        }
+
+        // Helper function to calculate RSI
+        function calculateRSI(data, period = 14) {
+            if (data.length < period) return null;
+            
+            let gains = 0;
+            let losses = 0;
+            
+            for (let i = 1; i < period; i++) {
+                const difference = data[i] - data[i-1];
+                if (difference >= 0) {
+                    gains += difference;
+                } else {
+                    losses -= difference;
+                }
+            }
+            
+            let avgGain = gains / period;
+            let avgLoss = losses / period;
+            
+            for (let i = period; i < data.length; i++) {
+                const difference = data[i] - data[i-1];
+                if (difference >= 0) {
+                    avgGain = (avgGain * 13 + difference) / period;
+                    avgLoss = (avgLoss * 13) / period;
+                } else {
+                    avgGain = (avgGain * 13) / period;
+                    avgLoss = (avgLoss * 13 - difference) / period;
+                }
+            }
+            
+            const rs = avgGain / avgLoss;
+            return 100 - (100 / (1 + rs));
         }
 
         // Initialize everything when the page loads
